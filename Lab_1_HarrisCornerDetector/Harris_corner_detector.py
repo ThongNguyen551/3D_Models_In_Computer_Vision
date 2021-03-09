@@ -4,29 +4,30 @@ import sys
 from numpy import linalg as LA
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import os
 
-image_path = "/Users/Liam/Documents/COSI Resources/Semester 2 - UJM/Computer Vision/Lab/Lab 1/Lab 1 Materials/chessboard00.png"
+image_path = "/Users/Liam/Documents/COSI Resources/Semester 2 - UJM/Computer Vision/Lab/Lab 1/Lab 1 Materials/chessboard06.png"
 des_path = "/Users/Liam/Documents/COSI Resources/Semester 2 - UJM/Computer Vision/Lab/Lab 1/Result/"
 
 # Display multiple images
-def display_multiple_img(images, rows = 1, cols=1, des_path=None):
+def display_multiple_img(images, image_name, rows = 1, cols=1, des_path=None):
     figure, ax = plt.subplots(nrows=rows,ncols=cols)
     for ind,title in enumerate(images):
         ax.ravel()[ind].imshow(images[title],cmap="gray")
         ax.ravel()[ind].set_title(title)
         ax.ravel()[ind].set_axis_off()
     
-    figure.savefig(des_path + "Harris_Corner_Process.png")
+    figure.savefig(des_path + "Harris_Corner_Process_{}.png".format(image_name))
     plt.subplots_adjust()
     plt.tight_layout(pad=1.0)
     plt.show()
 
 def image_derivative_and_smoothing(image, kernel_size, standard_deviation):
     # Compute image derivative
-    # Ix = cv.Sobel(image,cv.CV_64F,1,0,ksize=5)
-    # Iy = cv.Sobel(image,cv.CV_64F,0,1,ksize=5)
-    Iy = np.gradient(image, axis=0)
-    Ix = np.gradient(image, axis=1)
+    Ix = cv.Sobel(image,cv.CV_64F,1,0,ksize=5)
+    Iy = cv.Sobel(image,cv.CV_64F,0,1,ksize=5)
+    # Iy = np.gradient(image, axis=0)
+    # Ix = np.gradient(image, axis=1)
     IxIx = Ix * Ix
     IyIy = Iy * Iy
     IxIy = Ix * Iy
@@ -39,7 +40,7 @@ def image_derivative_and_smoothing(image, kernel_size, standard_deviation):
     return IxIx, IyIy, IxIy
 
 def compute_matrix(window_size, image, image_IxIx, image_IyIy, image_IxIy, k=0):
-    offset = int(window_size/2)
+    offset = int(window_size/2) # Get center point
     x_array = image.shape[0] - offset
     y_array = image.shape[1] - offset
     mtrx = []
@@ -83,7 +84,7 @@ def compute_matrix(window_size, image, image_IxIx, image_IyIy, image_IxIy, k=0):
     return mtrx
 
 def nms(window_size, image):
-    offset = int(window_size/2)
+    offset = int(window_size/2) # Get center point
     x_array = image.shape[0] - offset
     y_array = image.shape[1] - offset
     # Create empty image with zero values
@@ -98,8 +99,8 @@ def nms(window_size, image):
 
             # Get max value in window size            
             window_image = image[start_y : end_y, start_x : end_x]
-            if int(image[x_pixel][y_pixel]) == int(np.amax(window_image)):
-                empty_image[x_pixel][y_pixel] = image[x_pixel][y_pixel]
+            if int(image[y_pixel][x_pixel]) == int(np.amax(window_image)):
+                empty_image[y_pixel][x_pixel] = image[y_pixel][x_pixel]
 
     return empty_image
 
@@ -121,6 +122,7 @@ def main():
         std_deviation = 2
 
         img = cv.imread(image_path)
+        img_name = os.path.basename(image_path).split('.')[0]
         original_img = img.copy()
         w, h, c = img.shape
 
@@ -168,7 +170,7 @@ def main():
         image_list.append(["81 salient points NMS R",salient_points_R_nms_image])
 
         images = {"{}".format(image[0]): image[1] for image in image_list}
-        display_multiple_img(images, 5, 2, des_path=des_path)
+        display_multiple_img(images, img_name, 5, 2, des_path=des_path)
 
 main()
 
