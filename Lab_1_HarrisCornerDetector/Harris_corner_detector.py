@@ -5,8 +5,8 @@ from numpy import linalg as LA
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
-image_path = "/Users/Liam/Documents/COSIResources/Semester2-UJM/Computer Vision/3D_Models_In_Computer_Vision/Lab_1_HarrisCornerDetector/chessboard00.png"
-des_path = "/Users/Liam/Documents/COSIResources/Semester2-UJM/Computer Vision/3D_Models_In_Computer_Vision/Lab_1_HarrisCornerDetector/"
+image_path = "/Users/Liam/Documents/COSI Resources/Semester 2 - UJM/Computer Vision/Lab/Lab 1/Lab 1 Materials/chessboard00.png"
+des_path = "/Users/Liam/Documents/COSI Resources/Semester 2 - UJM/Computer Vision/Lab/Lab 1/Result/"
 
 # Display multiple images
 def display_multiple_img(images, rows = 1, cols=1, des_path=None):
@@ -17,13 +17,14 @@ def display_multiple_img(images, rows = 1, cols=1, des_path=None):
         ax.ravel()[ind].set_axis_off()
     
     figure.savefig(des_path + "Harris_Corner_Process.png")
-    plt.tight_layout()
+    plt.subplots_adjust()
+    plt.tight_layout(pad=1.0)
     plt.show()
 
 def image_derivative_and_smoothing(image, kernel_size, standard_deviation):
     # Compute image derivative
-    # Ix = cv.Sobel(img,cv.CV_8U,1,0,ksize=5)
-    # Iy = cv.Sobel(img,cv.CV_8U,0,1,ksize=5)
+    # Ix = cv.Sobel(image,cv.CV_64F,1,0,ksize=5)
+    # Iy = cv.Sobel(image,cv.CV_64F,0,1,ksize=5)
     Iy = np.gradient(image, axis=0)
     Ix = np.gradient(image, axis=1)
     IxIx = Ix * Ix
@@ -81,53 +82,93 @@ def compute_matrix(window_size, image, image_IxIx, image_IyIy, image_IxIy, k=0):
     mtrx = np.array(mtrx)
     return mtrx
 
-def draw_most_salient_points(image, np_array, radius = 1, color = (0,0,255), thickness = 1, threshold = 0):
+def nms(window_size, image):
+    offset = int(window_size/2)
+    x_array = image.shape[0] - offset
+    y_array = image.shape[1] - offset
+    # Create empty image with zero values
+    empty_image = np.zeros((image.shape[0],image.shape[1]))
+    for y_pixel in range(offset, y_array):
+        for x_pixel in range(offset, x_array):
+            # Initialize sliding window
+            start_x = x_pixel - offset
+            end_x = x_pixel + offset +1
+            start_y = y_pixel - offset
+            end_y = y_pixel + offset +1
+
+            # Get max value in window size            
+            window_image = image[start_y : end_y, start_x : end_x]
+            if int(image[x_pixel][y_pixel]) == int(np.amax(window_image)):
+                empty_image[x_pixel][y_pixel] = image[x_pixel][y_pixel]
+
+    return empty_image
+
+def draw_most_salient_points(image, np_array, radius = 1, color = (0,0,255), thickness = 2, threshold = 0):
+    # Get index list
     indices = np.unravel_index(np.argsort(-np_array, axis=None), np_array.shape)
     salient_points = []
     for i in range(threshold):
         cv.circle(image,(indices[0][i],indices[1][i]), radius, color, thickness)
-
     return image
 
-# Initialization
-image_list = []
-kernel_size = (9,9)
-std_deviation = 2
+def main():
+    print("Course: 3D Model in Computer Vision. Lab 1: Harris Corner Detector.")
+    print("Processing...")
+    if __name__== "__main__" :
+        # Initialization
+        image_list = []
+        kernel_size = (9,9)
+        std_deviation = 2
 
-img = cv.imread(image_path)
-w, h, c = img.shape
+        img = cv.imread(image_path)
+        original_img = img.copy()
+        w, h, c = img.shape
 
-# Compute the image derivative Ix and Iy and apply the Gaussian smoothing filter
-IxIx, IyIy, IxIy = image_derivative_and_smoothing(img, kernel_size, std_deviation)
+        # Convert image to gray scale image
+        img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-window_size = 3
-k_E = 0
-k_R = 0.04
+        # Compute the image derivative Ix and Iy and apply the Gaussian smoothing filter
+        IxIx, IyIy, IxIy = image_derivative_and_smoothing(img_gray, kernel_size, std_deviation)
 
-# Compute matrix E containing for each pixel the value of the smaller eigenvalue of M. 
-matrix_E = compute_matrix(window_size, img, IxIx, IyIy, IxIy, k_E)
-matrix_E = matrix_E.reshape(h-2, w-2)
+        window_size = 3
+        k_E = 0
+        k_R = 0.04
+
+        # Compute matrix E containing for each pixel the value of the smaller eigenvalue of M. 
+        matrix_E = compute_matrix(window_size, img_gray, IxIx, IyIy, IxIy, k_E)
+        matrix_E = matrix_E.reshape(h-2, w-2)
+
+        # Compute matrix R which contains for every point the cornerness score
+        matrix_R = compute_matrix(window_size, img_gray, IxIx, IyIy, IxIy, k_R)
+        matrix_R = matrix_R.reshape(h-2, w-2)
+
+        # Non-Maximum Suspension
+        matrix_E_nms = nms(window_size=11, image=matrix_E)
+        matrix_R_nms = nms(window_size=11, image=matrix_R)
+
+        # Draw most salient points
+        number_of_points = 81
+        salient_points_E_image = draw_most_salient_points(image = img.copy(), np_array = matrix_E, color = (255,0,0), threshold = number_of_points)
+        salient_points_R_image = draw_most_salient_points(image = img.copy(), np_array = matrix_R, color = (255,0,0), threshold = number_of_points)
+        salient_points_E_nms_image = draw_most_salient_points(image = img.copy(), np_array = matrix_E_nms, color = (255,0,0), threshold = number_of_points)
+        salient_points_R_nms_image = draw_most_salient_points(image = img.copy(), np_array = matrix_R_nms, color = (255,0,0), threshold = number_of_points)
 
 
-# Compute matrix R which contains for every point the cornerness score
-matrix_R = compute_matrix(window_size, img, IxIx, IyIy, IxIy, k_R)
-matrix_R = matrix_R.reshape(h-2, w-2)
 
+        # Display figures
+        image_list.append(["Original Image", original_img])
+        image_list.append(["Derivative Image IxIx", IxIx])
+        image_list.append(["Derivative Image IyIy", IyIy])
+        image_list.append(["Derivative Image IxIy", IxIy])
+        image_list.append(["Matrix E",matrix_E])
+        image_list.append(["Matrix R",matrix_R])
+        image_list.append(["81 salient points E",salient_points_E_image])
+        image_list.append(["81 salient points R",salient_points_R_image])
+        image_list.append(["81 salient points NMS E",salient_points_E_nms_image])
+        image_list.append(["81 salient points NMS R",salient_points_R_nms_image])
 
-# Draw most salient points
-number_of_points = 81
-salient_points_E_image = draw_most_salient_points(image = img, np_array = matrix_E, color = (255,0,0), threshold = number_of_points)
-salient_points_R_image = draw_most_salient_points(image = img, np_array = matrix_R, color = (255,0,0), threshold = number_of_points)
+        images = {"{}".format(image[0]): image[1] for image in image_list}
+        display_multiple_img(images, 5, 2, des_path=des_path)
 
+main()
 
-# Display figures
-image_list.append(["Derivative Image IxIx", IxIx])
-image_list.append(["Derivative Image IyIy", IyIy])
-image_list.append(["Derivative Image IxIy", IxIy])
-image_list.append(["Matrix E",matrix_E])
-image_list.append(["Matrix R",matrix_R])
-image_list.append(["81 most salient points from Matrix E",salient_points_E_image])
-image_list.append(["81 most salient points from Matrix R",salient_points_R_image])
-
-images = {"{}".format(image[0]): image[1] for image in image_list}
-display_multiple_img(images, 4, 2, des_path=des_path)

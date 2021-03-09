@@ -1,0 +1,282 @@
+#include <cv.h>
+#include <highgui.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+void Xderivative(float *src[], float *dst[]);
+void Yderivative(float *src[], float *dst[]);
+void imgwrite(char image_name[]);
+void imgread(char image_text[], int img_data[][image_width]);
+void getdim(char image_text[]);
+void gaussianfilter(float *src[], float *dst[]);
+void responsecalc(float *x2[], float *y2[], float *xy[], float *dst[], CvMat *finresponse);
+float minmax(float *img_array[], int option);
+void matmul(float *src1[], float *src2[], float *dst[]);
+
+////////////////////////////////////////////////////////////////////////////////
+// Harris corner detection:
+//
+// Load images
+// Compute Ix and Iy using Xderivative and Yderivative
+// Compute Ix2, Iy2 and Ixy using matmul (matrix multiplication)
+// Compute <Ix2> ... using Gaussian filtering gaussianfilter
+// Adapt Xderivative/Yderivative and create a new function to get the sum of <Ix2> on a 3*3 area
+// Compute R using responsecalc (might need to be adapted...)
+// Write a function to compute E
+//
+////////////////////////////////////////////////////////////////////////////////
+
+void Xderivative(float *src[], float *dst[])
+{
+ int anchor;
+ for (int l = 0; l < image_height; l++)
+    {
+     for (int m = 0; m < image_width; m++)
+        {
+         anchor = 5/2;
+         if (l < anchor || m < anchor || l >  image_height-1-anchor || m > image_width-1-anchor)
+         {
+         dst[l][m] = 0;
+         }
+         else
+         {
+          float sum = 0;
+          
+          int dX[3][3] = {-1, 0, 1, 
+						-1, 0, 1, 
+						-1, 0, 1};
+          for (int g = anchor; g >= -anchor; g--)
+          {
+             for (int h = anchor; h >= -anchor; h--)
+             {
+               sum = sum + src[l-g][m-h] * dX[anchor-g][anchor-h];
+             }
+          }
+          dst[l][m] = abs(sum);
+         }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Yderivative(float *src[], float *dst[])
+{
+ int anchor;
+ for (int l = 0; l < image_height; l++)
+    {
+     for (int m = 0; m < image_width; m++)
+        {
+         anchor = 5/2;
+         if (l < anchor || m < anchor || l >  image_height-1-anchor || m > image_width-1-anchor)
+         {
+         dst[l][m] = 0;
+         }
+         else
+         {
+          float sum = 0;
+          
+          int dY[3][3] = {-1, -1, -1, 
+						0, 0, 0, 
+						1, 1, 1};
+          for (int g = anchor; g >= -anchor; g--)
+          {
+             for (int h = anchor; h >= -anchor; h--)
+             {
+               sum = sum + src[l-g][m-h] * dY[anchor-g][anchor-h];
+             }
+          }
+          dst[l][m] = abs(sum);
+         }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void imgwrite(char image_name[])
+{
+ IplImage *input_image;
+ char image_text[20];
+ strcpy(image_text, image_name);
+ int m = 0;
+ while(image_text[m] != '.') {m++;}
+ image_text[m+1] = 't';
+ image_text[m+2] = 'x';
+ image_text[m+3] = 't';
+ image_text[m+4] = '\0';
+
+ input_image = cvLoadImage(image_name, 0);
+
+ FILE *input_image_data_text;
+ input_image_data_text = fopen(image_text, "w");
+
+ uchar *input_image_data = (uchar *) input_image->imageData;
+
+ fprintf(input_image_data_text, "%d\n", input_image->height);
+ fprintf(input_image_data_text, "%d\n", input_image->width);
+
+ int i = 0;
+ while(i < input_image->width*input_image->height)
+ {
+  fprintf(input_image_data_text, "%d\n", input_image_data[i]);
+  i++;
+ }
+
+ fclose(input_image_data_text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void imgread(char image_text[], int img_data[][image_width])
+{
+ FILE *temp;
+ temp = fopen(image_text, "r");
+
+ fscanf(temp, "%d", &image_height);
+ fscanf(temp, "%d", &image_width);
+
+ int j = 0, k = 0;
+ while(!((j+1)*k == image_width*image_height))
+ {
+  if(k == image_width)
+   {j++;k = 0;}
+
+  fscanf(temp, "%d", &img_data[j][k]);
+  k++;
+ }
+
+ fclose(temp);
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void getdim(char image_text[])
+{
+ FILE *temp;
+ temp = fopen(image_text, "r");
+
+ fscanf(temp, "%d", &image_height);
+ fscanf(temp, "%d", &image_width);
+
+ fclose(temp);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void gaussianfilter(float *src[], float *dst[])
+{
+float gaussian[9][9] = {0.0008, 0.0018, 0.0034, 0.0050, 0.0056, 0.0050, 0.0034, 0.0018, 0.0008, 
+    0.0018, 0.0044, 0.0082, 0.0119, 0.0135, 0.0119, 0.0082, 0.0044, 0.0018, 
+    0.0034, 0.0082, 0.0153, 0.0223, 0.0253, 0.0223, 0.0153, 0.0082, 0.0034, 
+    0.0050, 0.0119, 0.0223, 0.0325, 0.0368, 0.0325, 0.0223, 0.0119, 0.0050, 
+    0.0056, 0.0135, 0.0253, 0.0368, 0.0417, 0.0368, 0.0253, 0.0135, 0.0056, 
+    0.0050, 0.0119, 0.0223, 0.0325, 0.0368, 0.0325, 0.0223, 0.0119, 0.0050, 
+    0.0034, 0.0082, 0.0153, 0.0223, 0.0253, 0.0223, 0.0153, 0.0082, 0.0034, 
+    0.0018, 0.0044, 0.0082, 0.0119, 0.0135, 0.0119, 0.0082, 0.0044, 0.0018, 
+    0.0008, 0.0018, 0.0034, 0.0050, 0.0056, 0.0050, 0.0034, 0.0018, 0.0008};
+
+ int anchor;
+
+ for (int l = 0; l < image_height; l++)
+    {
+     for (int m = 0; m < image_width; m++)
+        {
+         anchor = 9/2;
+         if (l < anchor || m < anchor || l >  image_height-1-anchor || m > image_width-1-anchor)
+         {
+         dst[l][m] = src[l][m];
+         }
+         else
+         {
+          float sum = 0;
+          for (int g = anchor; g >= -anchor; g--)
+            {
+             for (int h = anchor; h >= -anchor; h--)
+             {
+              sum = sum + (src[l-g][m-h]) * (gaussian[anchor-g][anchor-h]);
+             }
+            }
+          dst[l][m] = sum;
+         }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void responsecalc(float *x2[], float *y2[], float *xy[], float *dst[], CvMat *finresponse)
+{
+ for (int i = 0; i <= image_height-1; i++)
+    {
+     for (int j = 0; j <= image_width-1; j++)
+        {
+         float det = (x2[i][j] * y2[i][j]) - pow(xy[i][j], 2);
+         float trace = x2[i][j] + y2[i][j];
+         dst[i][j] = det - 0.04*trace*trace;
+        }
+    }
+
+ float maxval = minmax(dst, 1);
+
+ for (int i = 0; i <= image_height-1; i++)
+    {
+     for (int j = 0; j <= image_width-1; j++)
+        {
+         if (dst[i][j] > 10000000000000)
+         {
+         dst[i][j] = 255;
+         //dst[i][j] = (dst[i][j]/maxval)*255;
+         CV_MAT_ELEM(*finresponse, uchar, i, j) = dst[i][j];
+         }
+         else
+         {
+         dst[i][j] = 0;
+         CV_MAT_ELEM(*finresponse, uchar, i, j) = dst[i][j];
+         }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////	
+
+float minmax(float *img_array[], int option)
+{
+ float val = 0;
+ if (option)
+ {
+ for (int i = 0; i <= image_height-1; i++)
+    {
+     for(int j = 0; j<= image_width-1; j++)
+        {
+         val = val > img_array[i][j] ? val : img_array[i][j];
+        }
+    }
+  }
+  else
+  {
+  for (int i = 0; i <= image_height-1; i++)
+    {
+     for(int j = 0; j<= image_width-1; j++)
+        {
+         val = val < img_array[i][j] ? val : img_array[i][j];
+        }
+    }
+  }
+ return val;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void matmul(float *src1[], float *src2[], float *dst[])
+{
+ for (int i = 0; i <= image_height-1; i++)
+    {
+     for (int j = 0; j<= image_width-1; j++)
+        {
+         dst[i][j] = src1[i][j] * src2[i][j];
+        }
+    }
+}
