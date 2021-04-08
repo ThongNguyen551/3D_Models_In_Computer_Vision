@@ -1,0 +1,5 @@
+http://fr.mathworks.com/discovery/stereo-vision.html
+
+http://fr.mathworks.com/help/vision/examples/stereo-calibration-and-scene-reconstruction.html
+
+http://fr.mathworks.com/help/vision/examples/sparse-3-d-reconstruction-from-two-views.html

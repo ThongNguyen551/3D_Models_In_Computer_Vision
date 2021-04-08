@@ -1,0 +1,11 @@
+calib_example
+	windows_size = 12x11
+	square_size = 30 mm
+
+LabData1
+	windows_size = 4x7
+	square_size = 58 mm
+	
+stereo_example
+	windows_size = 5x8
+	square_size = 30 mm

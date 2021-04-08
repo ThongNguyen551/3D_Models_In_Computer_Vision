@@ -1,0 +1,178 @@
+clear all; close all;
+
+%% Calibration image pair stereo1.jpg and stereo2.jpg
+% 3D coordinates of the points
+load 'XYZ.mat'
+load 'xyLeft.mat';
+load 'xyRight.mat';
+
+imLeft=imread('stereo1.jpg');
+figure(1);clf;image(imLeft);hold on;
+
+imRight=imread('stereo2.jpg');
+figure(2);clf;image(imRight);hold on;
+
+% Do camera calibration
+% Camera 1
+[ty,tx,tz]=size(imLeft);
+N=12; u0 = tx/2; v0 = ty/2;
+[K1,RT1]=calibTSAI(xyLeft',XYZ',N,u0,v0); % Calibration metrices
+P1Tsai = K1*RT1; %Re Projection matrix
+
+% Camera 2
+[ty,tx,tz]=size(imRight);
+N=12; u0 = tx/2; v0 = ty/2;
+[K2,RT2]=calibTSAI(xyRight',XYZ',N,u0,v0); % Calibration metrices
+P2Tsai = K2*RT2; % Projection matrix
+
+% Reprojection of the points used for calibration and verify
+
+XYZ=XYZ';
+% Make XYZ to be in homogeneous coordinates
+XYZT = [XYZ;ones(1,length(XYZ))];
+% Camera 1
+figure(1);
+% --> TODO <--
+% Plot the XY original coordinates of camera 1
+plot(xyLeft(:,1), xyLeft(:,2),'g+');
+% Reproject the XYZ (3D world) into uv (2D space) by following the equation
+% [x y w] = P*[X Y Z T]
+% u = x/w, v = y/w
+xywLeft = P1Tsai * XYZT; 
+uLeft = xywLeft(1,:)./xywLeft(3,:);
+vLeft = xywLeft(2,:)./xywLeft(3,:);
+plot(uLeft, vLeft,'r+');
+
+% Camera 2
+figure(2);
+% --> TODO <--
+% Plot the XY original coordinates of camera 2
+plot(xyRight(:,1), xyRight(:,2),'g+');
+% Reproject the XYZ (3D world) into uv (2D space) by following the equation
+% [x y w] = P*[X Y Z T]
+% u = x/w, v = y/w
+xywRight = P2Tsai * XYZT; 
+uRight = xywRight(1,:)./xywRight(3,:);
+vRight = xywRight(2,:)./xywRight(3,:);
+plot(uRight, vRight,'r+');
+
+%% Reconstruction 3D
+
+% Step 1. Select points from 2D images for reconstruction (from image 1 and 2)
+
+% Select the points from 2D image for reconstruction (from image 2)
+numPts = 4; % how many points? (example: 4 points to see the pyramid)
+
+% Select points from the object
+figure(1);
+% Uncomment the following two lines to enable the selection of points
+[Px1,Py1] = ginput(numPts);
+Ppyrlpx = [Px1 Py1];
+
+% Select the same object points from the other image (from image 2)
+figure(2);
+% Uncomment the following two lines to enable the selection of points
+[Px2,Py2] = ginput(numPts);
+Ppyrrpx = [Px2 Py2];
+
+
+% Step 2: Convert the coordinates in homogeneous coordinate system and then
+% project them into the camera coordinate system by using individual camera 
+% matrix K1 and K2
+
+% Convert the points into homogeneous coordinate system
+% Pcubelpxhom = [];
+% Pcuberpxhom = [];
+% Ppyrlpxhom = [];
+% Ppyrrpxhom = [];
+% --> TODO <--
+Ppyrlpxhom = [Ppyrlpx ones(length(Ppyrlpx),1)];
+Ppyrrpxhom = [Ppyrrpx ones(length(Ppyrrpx),1)];
+
+% Convert 2D object points into individual camera coordinate system using
+% inverse intrinsic camera calibration matrix K1 and K2. You will have the 
+% Corresponding 3D points in camera coordinate system
+% --> TODO <--
+% Obtain the coordinates (u,v) of the object in 2D space in the camera
+% world (X Y Z) by the following equation
+% [u v 1] = K1 * [X Y Z 1] => [X Y Z 1] = K1_inverse * [u v 1]
+% Get transpose of Ppyrlpxhom to convert the matrix [u v 1] into [u; v; 1] for computational purposes 
+PpyrCaml = K1\Ppyrlpxhom';
+PpyrCaml = PpyrCaml(1:3,:);
+PpyrCamr = K2\Ppyrrpxhom';
+PpyrCamr = PpyrCamr(1:3,:);
+
+
+%% Step 3: Construct global rotation and translation matrix among this two
+% camera. Use the Rotation and Translation matrix of each individual
+% camera.
+% --> TODO <--
+Rl=RT1(1:3,1:3);
+Tl=RT1(1:3,4);
+Rr=RT2(1:3,1:3);
+Tr=RT2(1:3,4);
+R = Rr*Rl'; T = Tl - R'*Tr;
+%% Step 4: Perform 3D reconstruction
+% Apply 3D Reconstruction algorithm
+% Don't forget to save the final 3D coordinates as homogeneous coordinate
+% system.
+
+Pcam =[];
+for cpt=1:numPts
+    % Construction de la matrice A
+    pl=PpyrCaml(:,cpt);
+    pr=PpyrCamr(:,cpt);
+    
+    A=[pl  -R'*pr cross(pl,R'*pr)];
+    
+    abc=inv(A)*T;
+
+    a0=abc(1);
+    b0=abc(2);
+    
+    final_Point = [];
+    % Calculate the final trianglated point with appropriate equation
+    % --> TODO <--
+    c = 0.5;
+    pl = a0*pl;
+    pr = T + b0*R'*pr;
+    final_Point = pl + c*(pr - pl);
+    
+    
+    
+    Pcam=[Pcam [final_Point;1]]; % save as homogeneous coordinate
+    
+    clear A;
+end
+
+% 4. 3D representation
+% 3D point coordinates are expressed as camera coordinate system. Threfore, It
+% is necessary to convert world coordinates to represent 3D
+
+% Conversion of coordinates in the world coordinate system
+PW = []; % world coordinate
+for cpt=1:numPts
+    rwP = [];
+    % do inverse transform with respect to a camera extrinsic calibration 
+    % parameter (rotation and translation) matrix to obtain the position of 
+    % the 3D points in the real world coordinate system
+    % --> TODO <--
+    rwP = inv(RT1)*Pcam(:,cpt);
+    PW = [PW rwP];
+end
+
+% Draw the 3D object
+figure(3)
+for cpt=1:numPts
+    plot3(PW(1,cpt),PW(2,cpt),PW(3,cpt),'g*'); hold on; % Draw point
+end
+% % % 
+% Draw lines
+for cpt=1:numPts
+    for j=cpt+1:numPts
+        line([PW(1,cpt) PW(1,j)], [PW(2,cpt) PW(2,j)], [PW(3,cpt) PW(3,j)]); 
+    end
+end
+hold off;
+title('3D reconstruction in the real world coordinate system');
+grid on;
